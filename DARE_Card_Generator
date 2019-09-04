@@ -1,0 +1,128 @@
+<?php
+	
+	//die;
+	
+	$collision_control = array();
+	
+	$run_number		= 19;	 	// 1-99
+	$run_version	= '01'; 	// 01-99
+	$card_count		= 40000; 	// 1-99999
+	
+	$login_code_length 		= 10;  // 8-10
+	$security_code_length 	= 10; // 8-10
+	
+	$card_start	= (100000 * $run_number) + 1;
+	$card_end	= $card_start + $card_count -1;
+	
+	/*$prizes = array (
+				//'$5000' => 1,
+				//'$2500' => 1,
+				'$500' 	=> 4,
+				'$200' 	=> 5,
+				'$100' 	=> 10,
+				'$40' 	=> 25,
+				'$20' 	=> 150
+			);
+	$prize_count = 194;	//196;*/
+	
+	$prizes = array (
+				'$200' 	=> 5,
+				'$100' 	=> 10,
+				'$40' 	=> 25,
+				'$20' 	=> 200
+			);
+	$prize_count = 240;
+	
+	$no_prize_message = 'No Instant prize win. Enter the Major Draw for your chance to Win $1000 or $1500';
+	
+	$prize_list = generate_prizes($prizes, $card_start, $card_end);
+	if (count($prize_list) !== $prize_count) die('INVALID PRIZE COUNT');
+	
+	$date_generated = date('Y-m-d H:i:s');
+	$date_proof_stamp = date('YmdHi') . '-' . $run_number . '-' . $run_version;
+	
+	$card_data = "RunNumber,CardNumber,LoginCode,SecurityCode,Prize,Winner,Hash,Claimed,ClaimDate,Generated,DataStamp\r";
+	
+	for ($card_number = $card_start; $card_number <= $card_end; $card_number++) {
+		
+		$codes = generate_codes($card_number);
+		
+		$card_data .= sprintf("%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s%s",  
+					$run_number, // RunNumber
+					$card_number, // CardNumber
+					$codes['login_code'], // LoginCode
+					$codes['security_code'], // SecurityCode
+					isset($prize_list[$card_number]) ? $prize_list[$card_number] : $no_prize_message, // Prize
+					isset($prize_list[$card_number]) ? 'Y' : 'N', // Winner
+					$codes['hash'], // Hash
+					'N', // Claimed
+					'0000-00-00 00:00:00', // ClaimDate
+					$date_generated, // Generated
+					$date_proof_stamp, // DATA STAMP
+					($card_number < $card_end) ? "\r" : '' // Newline
+				);
+		$collision_control[$codes['login_code']] = $codes['security_code'];
+	}
+	
+	$unique_login_codes = count($collision_control);
+	
+	if ($unique_login_codes !== $card_count) {
+		printf('<h2>ERROR: %d COLLISIONS - COUNT: %d</h2>', $card_count - $unique_login_codes, $unique_login_codes);
+		die;
+	}
+	
+	$filename = sprintf('DARE_Scratchers_Data_R%d_C%d_%s_%s.csv',
+							$run_number,
+							$card_count,
+							substr($date_generated, 0, 10),
+							$date_proof_stamp
+					);
+	
+	header('Content-Type: text/csv');
+	header('Content-Disposition: attachment; filename=' . $filename);
+	header('Pragma: no-cache');
+
+	print($card_data);
+
+	
+	
+	function generate_prizes ($prizes, $card_start, $card_end) {
+		$prize_array = $random_array = array();
+		for ($card_number = $card_start; $card_number <= $card_end; $card_number++) $random_array[] = $card_number;
+		shuffle($random_array);
+		
+		foreach ($prizes as $prize => $count)
+			for ($i = 0; $i < $count; $i++)
+				$prize_array[array_pop($random_array)] = $prize;
+		
+		return $prize_array;
+	}
+	
+	
+	function generate_codes ($card_number) {
+		global $run_number, $login_code_length, $security_code_length;
+		
+		$hash = md5(sprintf('%dR%d', $card_number, $run_number)); // MD5 CARD NUMBER WITH RUN NUMBER: ######R#
+		$hash = strtoupper($hash); // UPPERCASE CHARACTERS - MD5 Base32 IS LOWERCASE ONLY	
+		$hash = str_replace('0', 'Z', $hash); // REPLACE 0 WITH Z - MD5 Base32 IS 0-9a-f ONLY
+		$login_code = substr($hash, ($login_code_length * -1)); // LOGIN CODE IS LAST # CHARS/NUMS OF HASH
+		$security_code = substr($hash, 0, $security_code_length); // SECURITY CODE IS FIRST # CHARS/NUMS OF HASH
+		
+		return array (
+				'login_code' => $login_code,
+				'security_code'	=> $security_code,
+				'hash' => $hash
+			);
+	}
+	
+	
+	function d ($data) {
+		echo '<pre>';
+		var_dump($data);
+		echo '</pre>';
+	}
+	
+	
+	
+	
+	
